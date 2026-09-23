@@ -18,7 +18,8 @@ export default defineConfig({
   projects: [{ name: "chromium", use: devices["Desktop Chrome"] }],
   webServer: [
     {
-      command: "bun run start",
+      // The worker too: the Upload tests wait for the Parsing.
+      command: "bun run --parallel start start:worker",
       cwd: "../api",
       url: `${API_URL}/health`,
       reuseExistingServer: true,

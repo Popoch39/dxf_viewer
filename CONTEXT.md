@@ -31,5 +31,8 @@ Glossaire du visualiseur DXF. Ces termes sont employés tels quels dans le code,
 **Remplacement**
 : L'envoi d'un nouveau Fichier source pour un Dessin existant. La révision courante reste servie pendant le Parsing du nouveau fichier. Si le Parsing réussit, la nouvelle révision remplace l'ancienne, dont les objets sont supprimés du stockage. S'il échoue, l'ancienne révision est conservée et seul le champ erreur est rempli. Il n'y a pas d'historique de versions.
 
+**Upload**
+: L'envoi d'un Fichier source vers le stockage objet, de la création du Dessin (ou du début d'un Remplacement) jusqu'à son signalement de fin. Il a une progression, et on peut l'annuler. On dit Upload, jamais « envoi » ni « import ».
+
 **Statut**
 : L'étape du cycle de vie d'un Dessin : `awaiting_upload` (en attente d'upload), `queued` (en file), `parsing` (Parsing en cours), `ready` (prêt), `failed` (échec). Chaque changement de Statut est diffusé en temps réel au Propriétaire.

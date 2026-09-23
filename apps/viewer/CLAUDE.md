@@ -69,7 +69,15 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
 - **401** : le `QueryClient` est créé dans `src/router.ts` par `createQueryClient(onUnauthorized)`. Toute query ou mutation qui reçoit un 401 passe le store en `signedOut` et renvoie vers `/login`.
 - **Formulaires** : react-hook-form, zod et les composants shadcn `Field`. Un formulaire reçoit `onSubmit`, `pending` et `error` en props, et c'est la route qui le branche sur les hooks. C'est ce qui permet de le tester sans mock de module (lint `no-module-mocking`). Une erreur ne doit jamais décaler le formulaire : `FieldError` et `AuthFormError` réservent leur ligne même vides.
 
+## Upload (Dessins)
+
+- **Deux propriétaires** : le Statut d'un Dessin vient du serveur (cache TanStack Query, liste `drawingQueries.list()`). L'état de l'Upload qui n'existe que dans l'onglet (file d'attente, progression, erreur locale) vit dans `src/store/upload-store.ts`, indexé par `localId`, avec le `drawingId` dès que `POST /drawings` a répondu. La carte d'un Dessin superpose son Upload s'il en a un (`useUploadOf`), sinon elle affiche son Statut. Un Dessin en `awaiting_upload` sans Upload dans l'onglet est un « Upload interrompu ».
+- **Orchestration** : `src/api/drawings/upload.ts` est seul à écrire dans le store (`useStartUploads`, `useCancelUpload`). Il lance au plus 3 Uploads à la fois, et ne crée le Dessin qu'au démarrage de son Upload, pour que l'URL présignée n'expire pas dans la file. Le PUT vers le stockage passe par un XHR, car `fetch` ne donne pas la progression d'un envoi. Annuler, ou fermer un Upload en échec, supprime son Dessin.
+- **Statut en temps réel** : `useDrawingStatus(id, enabled)` ouvre un `EventSource` (`withCredentials`) tant que le Dessin est en `queued`/`parsing`, et écrit chaque changement dans la liste. Un Statut final relit la liste, pour récupérer le Résumé.
+- **Logique pure** dans `src/uploads/` (validation, progression et temps restant, file, messages d'erreur) et `src/drawings/card-view.ts` (ce qu'affiche une carte), testée sans React.
+- Le stockage doit accepter le CORS `PUT` depuis l'origine du viewer. MinIO en local l'accepte de toute origine par défaut ; en prod, le configurer sur le bucket.
+
 ## Tests
 
 - `bun run test` (vitest + Testing Library, jsdom) : les tests `src/**/*.test.{ts,tsx}`, sans réseau.
-- `bun run test:e2e` (Playwright) : `e2e/`, contre la vraie API. Il faut `bun infra:up` et `apps/api/.env` avec `VIEWER_URL=http://localhost:5173`. Il réutilise l'API et le viewer s'ils tournent déjà, sinon il les démarre. Il n'est pas branché sur `turbo test`. La première fois, lancer `bunx playwright install chromium`.
+- `bun run test:e2e` (Playwright) : `e2e/`, contre la vraie API. Il faut `bun infra:up` et `apps/api/.env` avec `VIEWER_URL=http://localhost:5173`. Il réutilise l'API et le viewer s'ils tournent déjà, sinon il les démarre (l'API avec son worker, pour le Parsing). Il n'est pas branché sur `turbo test`. La première fois, lancer `bunx playwright install chromium`.
