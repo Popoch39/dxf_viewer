@@ -257,6 +257,29 @@ export async function* statusEvents(
   }
 }
 
+/**
+ * Deletes a Dessin of the owner, then every object it points to: the Fichier
+ * source and the Dessin parsé of its current revision, and a pending upload.
+ * A Parsing still running finds no pending row and drops what it wrote.
+ */
+export async function deleteDrawing(ownerId: string, id: string): Promise<void> {
+  const [row] = await db.delete(drawing).where(owned(ownerId, id)).returning({
+    sourceKey: drawing.sourceKey,
+    parsedKey: drawing.parsedKey,
+    pendingSourceKey: drawing.pendingSourceKey,
+  });
+
+  if (row === undefined) {
+    throw notFound();
+  }
+
+  const keys = [row.sourceKey, row.parsedKey, row.pendingSourceKey].filter(
+    (key): key is string => key !== null,
+  );
+
+  await dropObjects(keys);
+}
+
 export async function updateDrawing(
   ownerId: string,
   id: string,

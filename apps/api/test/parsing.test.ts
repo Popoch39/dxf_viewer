@@ -2,10 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { treaty } from "@elysiajs/eden";
 import { parseDxf } from "@repo/dxf";
+import type { Job } from "bullmq";
 
 import { app } from "../src/app";
 import { env } from "../src/env";
 import type { DrawingSummary } from "../src/modules/drawings/model";
+import type { ParsingJob } from "../src/parsing/queue";
 import { startParsingWorker } from "../src/parsing/worker";
 import { signedUpCookie } from "./session";
 
@@ -91,6 +93,22 @@ async function readyDrawing(cookie: string, body: string) {
   expect(ready.status).toBe("ready");
 
   return ready;
+}
+
+/** Resolves once the worker has ended an attempt at the Parsing of the Dessin `id`. */
+function parsingAttempt(id: string) {
+  return new Promise<void>((resolve) => {
+    const settle = (job: Job<ParsingJob> | undefined) => {
+      if (job?.data.drawingId === id) {
+        worker.off("completed", settle);
+        worker.off("failed", settle);
+        resolve();
+      }
+    };
+
+    worker.on("completed", settle);
+    worker.on("failed", settle);
+  });
 }
 
 /** Starts the Remplacement of a Dessin and uploads `body` through its presigned URL. */
@@ -402,6 +420,120 @@ describe("POST /drawings/:id/replace", () => {
     const { error } = await api
       .drawings({ id: crypto.randomUUID() })
       .replace.post({ filename: "new.dxf", sizeBytes: 1 });
+
+    expect(error?.status).toBe(401);
+  });
+});
+
+describe("DELETE /drawings/:id", () => {
+  it("deletes the drawing and both files of its current revision", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const current = await readyDrawing(cookie, source);
+    const { parsedUrl, sourceUrl } = links(current);
+
+    const { status } = await api.drawings({ id: current.id }).delete(undefined, {
+      headers: { cookie },
+    });
+
+    const { data: list } = await api.drawings.get({ headers: { cookie } });
+    const { error } = await api.drawings({ id: current.id }).get({ headers: { cookie } });
+
+    expect(status).toBe(204);
+    expect(list).toEqual([]);
+    expect(error?.status).toBe(404);
+    expect((await fetch(parsedUrl)).status).toBe(404);
+    expect((await fetch(sourceUrl)).status).toBe(404);
+  });
+
+  it("deletes a drawing during a Remplacement, with its pending upload", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const current = await readyDrawing(cookie, source);
+    const { parsedUrl, sourceUrl } = links(current);
+    await uploadedReplacement(cookie, current.id, replacement);
+
+    const { status } = await api.drawings({ id: current.id }).delete(undefined, {
+      headers: { cookie },
+    });
+
+    const { error } = await api.drawings({ id: current.id }).get({ headers: { cookie } });
+
+    expect(status).toBe(204);
+    expect(error?.status).toBe(404);
+    expect((await fetch(parsedUrl)).status).toBe(404);
+    expect((await fetch(sourceUrl)).status).toBe(404);
+  });
+
+  it("deletes a drawing still awaiting its upload", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const drawing = await uploadedDrawing(cookie, "");
+
+    const { status } = await api.drawings({ id: drawing.id }).delete(undefined, {
+      headers: { cookie },
+    });
+
+    const { error } = await api.drawings({ id: drawing.id }).get({ headers: { cookie } });
+
+    expect(status).toBe(204);
+    expect(error?.status).toBe(404);
+  });
+
+  it("stays deleted when deleted while its Parsing is queued", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const drawing = await uploadedDrawing(cookie, source);
+    const attempted = parsingAttempt(drawing.id);
+
+    await api.drawings({ id: drawing.id }).complete.post(undefined, { headers: { cookie } });
+
+    const { status } = await api.drawings({ id: drawing.id }).delete(undefined, {
+      headers: { cookie },
+    });
+
+    await attempted;
+
+    const { data: list } = await api.drawings.get({ headers: { cookie } });
+    const { error } = await api.drawings({ id: drawing.id }).get({ headers: { cookie } });
+
+    expect(status).toBe(204);
+    expect(list).toEqual([]);
+    expect(error?.status).toBe(404);
+  });
+
+  it("answers 404 to another user, and deletes nothing", async () => {
+    const owner = await signedUpCookie(app.handle);
+    const intruder = await signedUpCookie(app.handle);
+    const current = await readyDrawing(owner, source);
+
+    const { error } = await api
+      .drawings({ id: current.id })
+      .delete(undefined, { headers: { cookie: intruder } });
+
+    const { data } = await api.drawings({ id: current.id }).get({ headers: { cookie: owner } });
+
+    if (data === null) {
+      throw new Error("expected the drawing");
+    }
+
+    const { parsedUrl, sourceUrl } = links(data);
+
+    expect(error?.status).toBe(404);
+    expect(error?.value).toMatchObject({ error: { code: "DRAWING_NOT_FOUND" } });
+    expect(data.status).toBe("ready");
+    expect(await (await fetch(parsedUrl)).json()).toEqual(parseDxf(source));
+    expect(await (await fetch(sourceUrl)).text()).toBe(source);
+  });
+
+  it("answers 404 to an unknown drawing", async () => {
+    const cookie = await signedUpCookie(app.handle);
+
+    const { error } = await api
+      .drawings({ id: crypto.randomUUID() })
+      .delete(undefined, { headers: { cookie } });
+
+    expect(error?.status).toBe(404);
+  });
+
+  it("answers 401 without a session", async () => {
+    const { error } = await api.drawings({ id: crypto.randomUUID() }).delete();
 
     expect(error?.status).toBe(401);
   });

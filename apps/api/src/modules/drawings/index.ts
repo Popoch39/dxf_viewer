@@ -15,6 +15,7 @@ import {
 import {
   completeUpload,
   createDrawing,
+  deleteDrawing,
   getDrawing,
   listDrawings,
   replaceSource,
@@ -98,4 +99,21 @@ export const drawings = new Elysia({ prefix: "/drawings", tags: ["Drawings"] })
     body: PatchDrawing,
     response: { 200: DrawingSummary, 400: ErrorEnvelope, 404: ErrorEnvelope },
     detail: { summary: "Rename a Dessin or change its description" },
-  });
+  })
+  .delete(
+    "/:id",
+    async ({ user, params, set }) => {
+      await deleteDrawing(user.id, params.id);
+
+      // Not `status(204)`: it wants a body, even for a 204.
+      set.status = 204;
+    },
+    {
+      auth: true,
+      params: DrawingParams,
+      response: { 204: t.Void(), 404: ErrorEnvelope },
+      detail: {
+        summary: "Delete a Dessin, with its Fichier source and its Dessin parsé",
+      },
+    },
+  );
