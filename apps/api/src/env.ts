@@ -19,6 +19,17 @@ function port(name: string, fallback: number): number {
   return value;
 }
 
+function positiveInteger(name: string, fallback: number): number {
+  const raw = Bun.env[name];
+  const value = raw === undefined || raw === "" ? fallback : Number(raw);
+
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`Invalid environment variable ${name}: "${raw}" is not a positive integer`);
+  }
+
+  return value;
+}
+
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
 
 type LogLevel = (typeof LOG_LEVELS)[number];
@@ -48,6 +59,7 @@ export const env = {
   logLevel: logLevel("LOG_LEVEL", "info"),
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL"),
+  maxUploadBytes: positiveInteger("MAX_UPLOAD_BYTES", 200 * 1024 * 1024),
   auth: {
     secret: required("BETTER_AUTH_SECRET"),
     url: required("BETTER_AUTH_URL"),

@@ -20,6 +20,17 @@ describe("OpenAPI documentation", () => {
     });
   });
 
+  it("documents the drawing routes in the generated spec", async () => {
+    const response = await app.handle(new Request("http://localhost/openapi/json"));
+
+    expect(await response.json()).toMatchObject({
+      paths: {
+        "/drawings": { get: { tags: ["Drawings"] }, post: { tags: ["Drawings"] } },
+        "/drawings/{id}": { get: { tags: ["Drawings"] }, patch: { tags: ["Drawings"] } },
+      },
+    });
+  });
+
   it("documents the Better Auth routes in the generated spec", async () => {
     const response = await app.handle(new Request("http://localhost/openapi/json"));
 
