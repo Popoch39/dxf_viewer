@@ -1,6 +1,7 @@
 import { S3Client } from "bun";
 
 import { env } from "./env";
+import { logger } from "./logger";
 
 export const storage = new S3Client(env.s3);
 
@@ -18,6 +19,18 @@ export function presignUpload(key: string): string {
 /** Presigned URL for a direct GET of the object at `key`. */
 export function presignDownload(key: string): string {
   return storage.presign(key, { method: "GET", expiresIn: DOWNLOAD_URL_TTL_SECONDS });
+}
+
+/**
+ * Deletes objects no row points to any more. Best effort: the change that
+ * orphaned them is already committed, so a failure is only logged.
+ */
+export async function dropObjects(keys: string[]): Promise<void> {
+  try {
+    await Promise.all(keys.map((key) => storage.delete(key)));
+  } catch (error) {
+    logger.error({ err: error, keys }, "Could not delete orphaned objects");
+  }
 }
 
 /** Size in bytes of the object at `key`, or null when there is none. */

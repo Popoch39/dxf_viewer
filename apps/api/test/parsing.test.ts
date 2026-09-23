@@ -5,6 +5,7 @@ import { parseDxf } from "@repo/dxf";
 
 import { app } from "../src/app";
 import { env } from "../src/env";
+import type { DrawingSummary } from "../src/modules/drawings/model";
 import { startParsingWorker } from "../src/parsing/worker";
 import { signedUpCookie } from "./session";
 
@@ -18,10 +19,19 @@ const FIXTURE = new URL(
   import.meta.url,
 );
 
+// Another drawing, without blocks, to replace the first one.
+const REPLACEMENT_FIXTURE = new URL(
+  "../../../packages/dxf/test/fixtures/r12-without-blocks.dxf",
+  import.meta.url,
+);
+
 let source = "";
+
+let replacement = "";
 
 beforeAll(async () => {
   source = await Bun.file(FIXTURE).text();
+  replacement = await Bun.file(REPLACEMENT_FIXTURE).text();
 });
 
 afterAll(async () => {
@@ -70,6 +80,55 @@ async function settledDrawing(cookie: string, id: string, deadline = Date.now() 
   await Bun.sleep(50);
 
   return settledDrawing(cookie, id, deadline);
+}
+
+/** A Dessin whose Fichier source `body` was parsed successfully. */
+async function readyDrawing(cookie: string, body: string) {
+  const drawing = await uploadedDrawing(cookie, body);
+  await api.drawings({ id: drawing.id }).complete.post(undefined, { headers: { cookie } });
+  const ready = await settledDrawing(cookie, drawing.id);
+
+  expect(ready.status).toBe("ready");
+
+  return ready;
+}
+
+/** Starts the Remplacement of a Dessin and uploads `body` through its presigned URL. */
+async function uploadedReplacement(cookie: string, id: string, body: string) {
+  const { data, error } = await api
+    .drawings({ id })
+    .replace.post({ filename: "new.dxf", sizeBytes: body.length }, { headers: { cookie } });
+
+  if (data === null) {
+    throw new Error(`expected a pending upload, got ${JSON.stringify(error?.value)}`);
+  }
+
+  const upload = await fetch(data.uploadUrl, { method: "PUT", body });
+
+  expect(upload.status).toBe(200);
+
+  return data.drawing;
+}
+
+function links(drawing: { parsedUrl: string | null; sourceUrl: string | null }) {
+  if (drawing.parsedUrl === null || drawing.sourceUrl === null) {
+    throw new Error("expected links to the current revision");
+  }
+
+  return { parsedUrl: drawing.parsedUrl, sourceUrl: drawing.sourceUrl };
+}
+
+// The fields of the Résumé that describe the current revision.
+function revision(drawing: DrawingSummary) {
+  return {
+    sizeBytes: drawing.sizeBytes,
+    dxfVersion: drawing.dxfVersion,
+    units: drawing.units,
+    extent: drawing.extent,
+    layers: drawing.layers,
+    entityCounts: drawing.entityCounts,
+    parsedAt: drawing.parsedAt,
+  };
 }
 
 describe("POST /drawings/:id/complete", () => {
@@ -202,6 +261,147 @@ describe("POST /drawings/:id/complete", () => {
 
   it("answers 401 without a session", async () => {
     const { error } = await api.drawings({ id: crypto.randomUUID() }).complete.post();
+
+    expect(error?.status).toBe(401);
+  });
+});
+
+describe("POST /drawings/:id/replace", () => {
+  it("keeps serving the current revision until the replacement is parsed", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const current = await readyDrawing(cookie, source);
+
+    const pending = await uploadedReplacement(cookie, current.id, replacement);
+    const { data: waiting } = await api.drawings({ id: current.id }).get({ headers: { cookie } });
+
+    const { data: queued } = await api
+      .drawings({ id: current.id })
+      .complete.post(undefined, { headers: { cookie } });
+
+    if (waiting === null || queued === null) {
+      throw new Error("expected the drawing");
+    }
+
+    expect(pending.status).toBe("awaiting_upload");
+    expect(waiting.status).toBe("awaiting_upload");
+    expect(queued.status).toBe("queued");
+    expect(revision(pending)).toEqual(revision(current));
+    expect(revision(waiting)).toEqual(revision(current));
+    expect(revision(queued)).toEqual(revision(current));
+
+    const parsed = await fetch(links(waiting).parsedUrl);
+
+    expect(await parsed.json()).toEqual(parseDxf(source));
+  });
+
+  it("switches to the new revision once parsed, and drops the old files", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const current = await readyDrawing(cookie, source);
+    const old = links(current);
+
+    await uploadedReplacement(cookie, current.id, replacement);
+    await api.drawings({ id: current.id }).complete.post(undefined, { headers: { cookie } });
+
+    const replaced = await settledDrawing(cookie, current.id);
+    const expected = parseDxf(replacement);
+
+    expect(replaced).toMatchObject({
+      status: "ready",
+      error: null,
+      sizeBytes: replacement.length,
+      dxfVersion: expected.meta.dxfVersion,
+      extent: expected.meta.extent,
+      layers: expected.layers,
+      entityCounts: expected.meta.entityCounts,
+    });
+
+    const fresh = links(replaced);
+
+    expect(await (await fetch(fresh.parsedUrl)).json()).toEqual(expected);
+    expect(await (await fetch(fresh.sourceUrl)).text()).toBe(replacement);
+    expect((await fetch(old.parsedUrl)).status).toBe(404);
+    expect((await fetch(old.sourceUrl)).status).toBe(404);
+  });
+
+  it("keeps the Dessin parsé when the replacement has the same content", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const current = await readyDrawing(cookie, source);
+
+    await uploadedReplacement(cookie, current.id, source);
+    await api.drawings({ id: current.id }).complete.post(undefined, { headers: { cookie } });
+
+    const replaced = await settledDrawing(cookie, current.id);
+    const parsed = await fetch(links(replaced).parsedUrl);
+
+    expect(replaced.status).toBe("ready");
+    expect(await parsed.json()).toEqual(parseDxf(source));
+  });
+
+  it("keeps the current revision served, with the error, when the replacement is invalid", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const current = await readyDrawing(cookie, source);
+
+    await uploadedReplacement(cookie, current.id, "this is not a drawing");
+    await api.drawings({ id: current.id }).complete.post(undefined, { headers: { cookie } });
+
+    const failed = await settledDrawing(cookie, current.id);
+
+    expect(failed.status).toBe("failed");
+    expect(failed.error).toStartWith("The file is not a valid DXF");
+    expect(revision(failed)).toEqual(revision(current));
+
+    const { parsedUrl, sourceUrl } = links(failed);
+
+    expect(await (await fetch(parsedUrl)).json()).toEqual(parseDxf(source));
+    expect(await (await fetch(sourceUrl)).text()).toBe(source);
+  });
+
+  it("takes the place of an upload still pending", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const drawing = await uploadedDrawing(cookie, source);
+
+    await uploadedReplacement(cookie, drawing.id, replacement);
+    await api.drawings({ id: drawing.id }).complete.post(undefined, { headers: { cookie } });
+
+    const ready = await settledDrawing(cookie, drawing.id);
+
+    expect(ready).toMatchObject({ status: "ready", sizeBytes: replacement.length });
+  });
+
+  it("answers 400 when the declared size exceeds the upload limit", async () => {
+    const cookie = await signedUpCookie(app.handle);
+    const current = await readyDrawing(cookie, source);
+
+    const { error } = await api
+      .drawings({ id: current.id })
+      .replace.post(
+        { filename: "huge.dxf", sizeBytes: env.maxUploadBytes + 1 },
+        { headers: { cookie } },
+      );
+
+    expect(error?.status).toBe(400);
+  });
+
+  it("answers 404 to another user, and leaves the drawing untouched", async () => {
+    const owner = await signedUpCookie(app.handle);
+    const intruder = await signedUpCookie(app.handle);
+    const current = await readyDrawing(owner, source);
+
+    const { error } = await api
+      .drawings({ id: current.id })
+      .replace.post({ filename: "new.dxf", sizeBytes: 1 }, { headers: { cookie: intruder } });
+
+    const { data } = await api.drawings({ id: current.id }).get({ headers: { cookie: owner } });
+
+    expect(error?.status).toBe(404);
+    expect(error?.value).toMatchObject({ error: { code: "DRAWING_NOT_FOUND" } });
+    expect(data?.status).toBe("ready");
+  });
+
+  it("answers 401 without a session", async () => {
+    const { error } = await api
+      .drawings({ id: crypto.randomUUID() })
+      .replace.post({ filename: "new.dxf", sizeBytes: 1 });
 
     expect(error?.status).toBe(401);
   });

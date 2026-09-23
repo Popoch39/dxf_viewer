@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { logger } from "../logger";
 import { drawing } from "../modules/drawings/schema";
-import { storage } from "../storage";
+import { dropObjects, storage } from "../storage";
 import { publishStatus, statusColumns } from "./events";
 
 // Every write is conditioned on the pending key: a job whose Fichier source is
@@ -48,38 +48,82 @@ export async function parseSource(drawingId: string, sourceKey: string): Promise
   const key = parsedKey(drawingId, sha256);
   await storage.write(key, JSON.stringify(parsed), { type: "application/json" });
 
-  // A single UPDATE: the whole Résumé and the new revision switch at once.
-  const [updated] = await db
-    .update(drawing)
-    .set({
-      status: "ready",
-      error: null,
-      sourceKey,
-      sourceFilename: sql`${drawing.pendingSourceFilename}`,
-      parsedKey: key,
-      sizeBytes: bytes.byteLength,
-      sha256,
-      dxfVersion: parsed.meta.dxfVersion,
-      units: parsed.meta.units,
-      extent: parsed.meta.extent,
-      layers: parsed.layers,
-      entityCounts: parsed.meta.entityCounts,
-      pendingSourceKey: null,
-      pendingSourceFilename: null,
-      parsedAt: new Date(),
-    })
-    .where(pending(drawingId, sourceKey))
-    .returning(statusColumns);
+  // The whole Résumé and the new revision switch at once. The previous
+  // revision is read under the same lock, so its objects can be dropped.
+  const switched = await db.transaction(async (tx) => {
+    const [previous] = await tx
+      .select({ sourceKey: drawing.sourceKey, parsedKey: drawing.parsedKey })
+      .from(drawing)
+      .where(pending(drawingId, sourceKey))
+      .for("update");
 
-  if (updated === undefined) {
+    if (previous === undefined) {
+      return null;
+    }
+
+    const [updated] = await tx
+      .update(drawing)
+      .set({
+        status: "ready",
+        error: null,
+        sourceKey,
+        sourceFilename: sql`${drawing.pendingSourceFilename}`,
+        parsedKey: key,
+        sizeBytes: bytes.byteLength,
+        sha256,
+        dxfVersion: parsed.meta.dxfVersion,
+        units: parsed.meta.units,
+        extent: parsed.meta.extent,
+        layers: parsed.layers,
+        entityCounts: parsed.meta.entityCounts,
+        pendingSourceKey: null,
+        pendingSourceFilename: null,
+        parsedAt: new Date(),
+      })
+      .where(pending(drawingId, sourceKey))
+      .returning(statusColumns);
+
+    if (updated === undefined) {
+      throw new Error("update returned no drawing");
+    }
+
+    return { previous, updated };
+  });
+
+  if (switched === null) {
     await storage.delete(key);
     logger.info({ drawingId }, "Parsing discarded: the Fichier source is no longer pending");
 
     return;
   }
 
+  const { previous, updated } = switched;
   await publishStatus(drawingId, updated);
+  await dropObjects(replacedObjects(previous.sourceKey, previous.parsedKey, key));
   logger.info({ drawingId, sha256 }, "Drawing parsed");
+}
+
+/**
+ * Objects of the revision replaced by the one whose Dessin parsé is at
+ * `newParsedKey`. A Fichier source with the same content shares its Dessin
+ * parsé, which is kept.
+ */
+function replacedObjects(
+  oldSourceKey: string | null,
+  oldParsedKey: string | null,
+  newParsedKey: string,
+): string[] {
+  const keys: string[] = [];
+
+  if (oldSourceKey !== null) {
+    keys.push(oldSourceKey);
+  }
+
+  if (oldParsedKey !== null && oldParsedKey !== newParsedKey) {
+    keys.push(oldParsedKey);
+  }
+
+  return keys;
 }
 
 /** The Dessin parsé, or null when the Fichier source was rejected as an invalid DXF. */

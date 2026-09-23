@@ -3,12 +3,13 @@ import { Elysia, sse, t } from "elysia";
 import { ErrorEnvelope } from "../../errors";
 import { authPlugin } from "../auth";
 import {
-  CreatedDrawing,
   CreateDrawing,
   DrawingDetail,
   DrawingParams,
   DrawingSummary,
   PatchDrawing,
+  PendingUpload,
+  SourceFile,
   StatusEventMessage,
 } from "./model";
 import {
@@ -16,6 +17,7 @@ import {
   createDrawing,
   getDrawing,
   listDrawings,
+  replaceSource,
   statusEvents,
   updateDrawing,
 } from "./service";
@@ -25,7 +27,7 @@ export const drawings = new Elysia({ prefix: "/drawings", tags: ["Drawings"] })
   .post("", async ({ user, body, status }) => status(201, await createDrawing(user.id, body)), {
     auth: true,
     body: CreateDrawing,
-    response: { 201: CreatedDrawing, 400: ErrorEnvelope },
+    response: { 201: PendingUpload, 400: ErrorEnvelope },
     detail: { summary: "Create a Dessin and get a presigned URL to upload its Fichier source" },
   })
   .get("", ({ user }) => listDrawings(user.id), {
@@ -60,6 +62,17 @@ export const drawings = new Elysia({ prefix: "/drawings", tags: ["Drawings"] })
       },
     },
   )
+  .post("/:id/replace", ({ user, params, body }) => replaceSource(user.id, params.id, body), {
+    auth: true,
+    params: DrawingParams,
+    body: SourceFile,
+    response: { 200: PendingUpload, 400: ErrorEnvelope, 404: ErrorEnvelope },
+    detail: {
+      summary: "Start the Remplacement of the Fichier source: get a presigned URL for the new one",
+      description:
+        "The current revision stays served until the new file is parsed. Upload the new file to `uploadUrl`, then call `/complete`. An upload still pending is dropped.",
+    },
+  })
   .get(
     "/:id/events",
     async function* ({ user, params, request }) {

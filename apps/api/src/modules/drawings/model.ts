@@ -58,23 +58,28 @@ const Name = t.String({ minLength: 1, maxLength: 200 });
 
 const Description = t.Nullable(t.String({ maxLength: 2000 }));
 
-export const CreateDrawing = t.Object({
-  name: Name,
+/** The Fichier source about to be uploaded. */
+export const SourceFile = t.Object({
   filename: t.String({ minLength: 1, maxLength: 255 }),
   // Declared by the client and checked up front; the stored object's real size
   // is checked again when the upload completes, since a PUT URL cannot cap it.
   sizeBytes: t.Integer({ minimum: 1, maximum: env.maxUploadBytes }),
 });
 
+export type SourceFile = typeof SourceFile.static;
+
+export const CreateDrawing = t.Composite([t.Object({ name: Name }), SourceFile]);
+
 export type CreateDrawing = typeof CreateDrawing.static;
 
-export const CreatedDrawing = t.Object({
+/** A Dessin awaiting the upload of a Fichier source. */
+export const PendingUpload = t.Object({
   drawing: DrawingSummary,
   /** Presigned, short-lived PUT URL for the Fichier source. */
   uploadUrl: t.String(),
 });
 
-export type CreatedDrawing = typeof CreatedDrawing.static;
+export type PendingUpload = typeof PendingUpload.static;
 
 export const PatchDrawing = t.Object(
   { name: t.Optional(Name), description: t.Optional(Description) },

@@ -5,14 +5,15 @@ import { env } from "../../env";
 import { ApiError } from "../../errors";
 import { publishStatus, type StatusChange, subscribeToStatus } from "../../parsing/events";
 import { enqueueParsing } from "../../parsing/queue";
-import { objectSize, presignDownload, presignUpload, storage } from "../../storage";
+import { dropObjects, objectSize, presignDownload, presignUpload, storage } from "../../storage";
 import type {
-  CreatedDrawing,
   CreateDrawing,
   DrawingDetail,
   DrawingStatus,
   DrawingSummary,
   PatchDrawing,
+  PendingUpload,
+  SourceFile,
   StatusEvent,
 } from "./model";
 import { drawing, type DrawingRow } from "./schema";
@@ -47,10 +48,7 @@ function newSourceKey(): string {
 }
 
 /** Creates a Dessin awaiting the upload of its Fichier source. */
-export async function createDrawing(
-  ownerId: string,
-  input: CreateDrawing,
-): Promise<CreatedDrawing> {
+export async function createDrawing(ownerId: string, input: CreateDrawing): Promise<PendingUpload> {
   const key = newSourceKey();
 
   const [row] = await db
@@ -173,6 +171,57 @@ export async function completeUpload(ownerId: string, id: string): Promise<Drawi
   await publishStatus(id, queued);
 
   return toSummary(queued);
+}
+
+/**
+ * Starts the Remplacement of the Fichier source: the current revision stays
+ * served while the new file is uploaded and parsed. An upload still pending is
+ * dropped, and its Parsing, if queued, will change nothing.
+ */
+export async function replaceSource(
+  ownerId: string,
+  id: string,
+  input: SourceFile,
+): Promise<PendingUpload> {
+  const key = newSourceKey();
+
+  // Locked: a concurrent Remplacement cannot read the same previous upload.
+  const { previousKey, row } = await db.transaction(async (tx) => {
+    const [previous] = await tx
+      .select({ pendingSourceKey: drawing.pendingSourceKey })
+      .from(drawing)
+      .where(owned(ownerId, id))
+      .for("update");
+
+    if (previous === undefined) {
+      throw notFound();
+    }
+
+    const [updated] = await tx
+      .update(drawing)
+      .set({
+        status: "awaiting_upload",
+        error: null,
+        pendingSourceKey: key,
+        pendingSourceFilename: input.filename,
+      })
+      .where(owned(ownerId, id))
+      .returning();
+
+    if (updated === undefined) {
+      throw new Error("update returned no drawing");
+    }
+
+    return { previousKey: previous.pendingSourceKey, row: updated };
+  });
+
+  await publishStatus(id, row);
+
+  if (previousKey !== null) {
+    await dropObjects([previousKey]);
+  }
+
+  return { drawing: toSummary(row), uploadUrl: presignUpload(key) };
 }
 
 function sameStatus(event: StatusEvent, change: StatusChange): boolean {
