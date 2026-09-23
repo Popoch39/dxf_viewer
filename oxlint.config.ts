@@ -1,7 +1,7 @@
 import { defineConfig } from "oxlint";
 
 export default defineConfig({
-  plugins: ["eslint", "typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "nextjs"],
+  plugins: ["eslint", "typescript", "unicorn", "oxc", "import", "react", "jsx-a11y"],
   categories: {
     correctness: "error",
     suspicious: "error",
@@ -29,25 +29,20 @@ export default defineConfig({
     ".roo/**",
     ".windsurf/**",
     "tools/oxlint/anti-slop/**",
-    "**/.next/**",
-    "**/next-env.d.ts",
     "**/dist/**",
     "**/out/**",
   ],
   jsPlugins: [{ name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" }],
   rules: {
-    // Automatic JSX runtime (React 19 + Next): React does not need to be in scope.
+    // Automatic JSX runtime (React 19): React does not need to be in scope.
     "react/react-in-jsx-scope": "off",
+    // Keeps Vite fast refresh working.
+    "react/only-export-components": ["warn", { allowConstantExport: true }],
     "import/no-unassigned-import": ["error", { allow: ["**/*.css"] }],
-    // Library types (ReactNode, ImageProps…) can never be deeply readonly.
+    // Library types (ReactNode, ReactElement) can never be deeply readonly.
     "typescript/prefer-readonly-parameter-types": [
       "warn",
-      {
-        allow: [
-          { from: "package", package: "react", name: ["ReactNode", "ReactElement"] },
-          { from: "package", package: "next", name: "ImageProps" },
-        ],
-      },
+      { allow: [{ from: "package", package: "react", name: ["ReactNode", "ReactElement"] }] },
     ],
     "oxc/no-accumulating-spread": "error",
     "anti-slop/no-array-filter-map": "error",

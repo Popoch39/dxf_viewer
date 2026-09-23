@@ -15,8 +15,6 @@ export default defineConfig({
     ".roo/**",
     ".windsurf/**",
     "tools/oxlint/anti-slop/**",
-    "**/.next/**",
-    "**/next-env.d.ts",
     "**/dist/**",
     "**/out/**",
   ],
