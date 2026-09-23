@@ -1,16 +1,14 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 
-import { authQueries, useSignIn } from "@/api/auth";
+import { loadCurrentUser, useSignIn } from "@/api/auth";
 import { authSearchSchema } from "@/auth/schemas";
 import { AuthPage } from "@/components/auth/auth-page";
 import { LoginForm } from "@/components/auth/login-form";
 
 export const Route = createFileRoute("/login")({
   validateSearch: authSearchSchema,
-  beforeLoad: async ({ context, search }) => {
-    const session = await context.queryClient.ensureQueryData(authQueries.session());
-
-    if (session !== null) {
+  beforeLoad: async ({ search }) => {
+    if ((await loadCurrentUser()) !== null) {
       throw redirect({ href: search.redirect ?? "/" });
     }
   },

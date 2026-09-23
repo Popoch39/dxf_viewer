@@ -1,12 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
 
-import { useSession, useSignOut } from "@/api/auth";
+import { useSignOut } from "@/api/auth";
 import { Button } from "@/components/ui/button";
+import { useCurrentUser } from "@/store/session-store";
 
 /** Top bar of the signed-in pages: who is connected, and the way out. */
 export function AppHeader() {
-  const { data: session } = useSession();
+  const user = useCurrentUser();
   const signOut = useSignOut();
   const navigate = useNavigate();
 
@@ -14,9 +15,7 @@ export function AppHeader() {
     <header className="flex items-center justify-between gap-4 border-b px-4 py-2">
       <span className="font-semibold">DXF Viewer</span>
       <div className="flex min-w-0 items-center gap-3">
-        {session ? (
-          <span className="truncate text-sm text-muted-foreground">{session.user.name}</span>
-        ) : null}
+        {user ? <span className="truncate text-sm text-muted-foreground">{user.name}</span> : null}
         <Button
           variant="outline"
           size="sm"

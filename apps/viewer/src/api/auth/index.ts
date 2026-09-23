@@ -1,8 +1,9 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createAuthClient } from "better-auth/client";
 
 import type { SignInValues, SignUpValues } from "@/auth/schemas";
 import { env } from "@/env";
+import { useSessionStore } from "@/store/session-store";
 
 import { ApiRequestError } from "../client";
 
@@ -12,6 +13,8 @@ const authClient = createAuthClient({
   baseURL: `${env.apiUrl}/api/auth`,
   fetchOptions: { credentials: "include" },
 });
+
+export type User = (typeof authClient.$Infer.Session)["user"];
 
 interface AuthFailure {
   status: number;
@@ -37,39 +40,64 @@ async function unwrapAuth<Data>(request: Promise<AuthResult<Data>>): Promise<Dat
   });
 }
 
-export const authQueries = {
-  all: () => ["auth"] as const,
-  /** The current Session and its Utilisateur, or `null` when signed out. */
-  session: () =>
-    queryOptions({
-      queryKey: [...authQueries.all(), "session"],
-      queryFn: () => unwrapAuth(authClient.getSession()),
-    }),
-};
+/** Like `unwrapAuth()`, for a call whose success always carries data. */
+async function unwrapAuthData<Data>(request: Promise<AuthResult<Data | null>>): Promise<Data> {
+  const data = await unwrapAuth(request);
 
-export function useSession() {
-  return useQuery(authQueries.session());
+  if (data === null) {
+    throw new ApiRequestError(502, { code: "UNEXPECTED_RESPONSE", message: "Empty auth response" });
+  }
+
+  return data;
+}
+
+let pendingSession: Promise<void> | null = null;
+
+async function askSession(): Promise<void> {
+  try {
+    const session = await unwrapAuth(authClient.getSession());
+    const { signedIn, signedOut } = useSessionStore.getState();
+
+    if (session === null) {
+      signedOut();
+    } else {
+      signedIn(session.user);
+    }
+  } finally {
+    pendingSession = null;
+  }
+}
+
+/**
+ * The signed-in Utilisateur, or `null`. The API is asked once per page load
+ * (concurrent callers share the request); the session store answers afterwards.
+ */
+export async function loadCurrentUser(): Promise<User | null> {
+  if (!useSessionStore.getState().loaded) {
+    pendingSession ??= askSession();
+    await pendingSession;
+  }
+
+  return useSessionStore.getState().user;
 }
 
 export function useSignIn() {
-  const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: (credentials: SignInValues) => unwrapAuth(authClient.signIn.email(credentials)),
-    // Awaited, so that the next route reads the new Session and not the cached `null`.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: authQueries.all(), refetchType: "all" }),
+    mutationFn: (credentials: SignInValues) => unwrapAuthData(authClient.signIn.email(credentials)),
+    onSuccess: (result) => {
+      useSessionStore.getState().signedIn(result.user);
+    },
   });
 }
 
 export function useSignUp() {
-  const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: (registration: SignUpValues) => unwrapAuth(authClient.signUp.email(registration)),
+    mutationFn: (registration: SignUpValues) =>
+      unwrapAuthData(authClient.signUp.email(registration)),
     // The API signs the new Utilisateur in right away.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: authQueries.all(), refetchType: "all" }),
+    onSuccess: (result) => {
+      useSessionStore.getState().signedIn(result.user);
+    },
   });
 }
 
@@ -81,7 +109,7 @@ export function useSignOut() {
     // Nothing cached belongs to the next Utilisateur of this browser.
     onSuccess: () => {
       queryClient.clear();
-      queryClient.setQueryData(authQueries.session().queryKey, null);
+      useSessionStore.getState().signedOut();
     },
   });
 }

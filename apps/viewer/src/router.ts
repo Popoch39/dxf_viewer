@@ -1,13 +1,13 @@
 import { createRouter } from "@tanstack/react-router";
 
-import { authQueries } from "./api/auth/index.ts";
 import { createQueryClient } from "./api/query-client.ts";
 import { routeTree } from "./routeTree.gen.ts";
+import { useSessionStore } from "./store/session-store.ts";
 
 // A 401 in the middle of a page: the Session is gone, back to the login page,
 // which brings the Utilisateur back here once signed in again.
 export const queryClient = createQueryClient(() => {
-  queryClient.setQueryData(authQueries.session().queryKey, null);
+  useSessionStore.getState().signedOut();
 
   const { pathname, href } = router.state.location;
 

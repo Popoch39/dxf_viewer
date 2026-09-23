@@ -1,16 +1,14 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 
-import { authQueries, useSignUp } from "@/api/auth";
+import { loadCurrentUser, useSignUp } from "@/api/auth";
 import { authSearchSchema } from "@/auth/schemas";
 import { AuthPage } from "@/components/auth/auth-page";
 import { RegisterForm } from "@/components/auth/register-form";
 
 export const Route = createFileRoute("/register")({
   validateSearch: authSearchSchema,
-  beforeLoad: async ({ context, search }) => {
-    const session = await context.queryClient.ensureQueryData(authQueries.session());
-
-    if (session !== null) {
+  beforeLoad: async ({ search }) => {
+    if ((await loadCurrentUser()) !== null) {
       throw redirect({ href: search.redirect ?? "/" });
     }
   },

@@ -8,6 +8,7 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
   - chaque donnée a un seul propriétaire (un état, un store, l'URL ou le cache TanStack Query). Pas de copie d'une prop ou d'un état dans un autre état : on dérive au rendu ;
   - un composant a une seule responsabilité. Dès qu'il mélange récupération de données, logique métier et affichage, on le découpe : la logique va dans un hook ou un module pur, l'affichage dans des composants plus petits ;
   - la logique métier (parsing DXF, géométrie, transformations) vit dans des modules TypeScript purs, hors des composants, et reste testable sans React.
+- **État client partagé** : dans un store zustand, jamais dans le cache TanStack Query, qui ne porte que des données serveur. Tous les stores sont rangés dans `src/store/`, avec un fichier par store (`session-store.ts`…). Chaque store exporte le hook `use<Nom>Store` et des sélecteurs nommés d'après le domaine (`useCurrentUser()`).
 - **Le moins de `useEffect` possible.** Avant d'en écrire un, chercher l'alternative : valeur dérivée calculée au rendu, logique dans le handler d'événement, `key` pour réinitialiser un état, `useSyncExternalStore` pour une source externe, TanStack Query pour les données serveur. Un effet ne sert qu'à synchroniser avec un système externe (DOM impératif, canvas, abonnement, WebGL…).
 - **React Compiler actif** : ne pas ajouter `useMemo` / `useCallback` / `memo` par réflexe, le compilateur mémoïse déjà. Il suppose du code qui respecte les règles de React, sinon il produit des rendus périmés ou incohérents sans erreur visible :
   - pas de mutation de props, d'état ou de valeurs issues de hooks, pas de mutation d'objets après leur passage en JSX ;
@@ -54,9 +55,12 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
 
 ## Auth (Utilisateur et Session)
 
-- **Client** : Eden ne type pas `/api/auth/*`, donc `src/api/auth/` passe par le client vanilla de Better Auth (`better-auth/client`), jamais par `better-auth/react`. Chaque appel passe par `unwrapAuth()`, qui lève une `ApiRequestError` comme `unwrap()`. La Session appartient au cache TanStack Query, `authQueries.session()`, qui vaut `null` quand personne n'est connecté.
-- **Routes** : une page qui demande une Session se met sous le layout sans segment `src/routes/_authenticated.tsx`. Son `beforeLoad` redirige vers `/login?redirect=<url>`. `/login` et `/register` renvoient vers `redirect` (ou `/`) si une Session existe déjà. `authSearchSchema` (`src/auth/schemas.ts`) n'accepte que des chemins internes, pour éviter un open redirect.
-- **401** : le `QueryClient` est créé dans `src/router.ts` par `createQueryClient(onUnauthorized)`. Toute query ou mutation qui reçoit un 401 vide la Session du cache et renvoie vers `/login`.
+- **Client** : Eden ne type pas `/api/auth/*`, donc `src/api/auth/` passe par le client vanilla de Better Auth (`better-auth/client`), jamais par `better-auth/react`. Chaque appel passe par `unwrapAuth()`, qui lève une `ApiRequestError` comme `unwrap()`.
+- **Utilisateur connecté** : c'est un état client, porté par le store zustand `src/store/session-store.ts` et jamais par le cache TanStack Query. On le lit avec `useCurrentUser()`, qui vaut `null` sans Session. Seul `src/api/auth/` écrit dans ce store, avec `signedIn` et `signedOut` :
+  - `loadCurrentUser()` demande la Session à l'API une fois par chargement de page, puis répond depuis le store ;
+  - les hooks de connexion, d'inscription et de déconnexion mettent le store à jour dans leur `onSuccess`, et la déconnexion vide aussi le cache Query.
+- **Routes** : une page qui demande une Session se met sous le layout sans segment `src/routes/_authenticated.tsx`. Son `beforeLoad` fait `await loadCurrentUser()` et redirige vers `/login?redirect=<url>` s'il obtient `null`. `/login` et `/register` renvoient vers `redirect` (ou `/`) si une Session existe déjà. `authSearchSchema` (`src/auth/schemas.ts`) n'accepte que des chemins internes, pour éviter un open redirect.
+- **401** : le `QueryClient` est créé dans `src/router.ts` par `createQueryClient(onUnauthorized)`. Toute query ou mutation qui reçoit un 401 passe le store en `signedOut` et renvoie vers `/login`.
 - **Formulaires** : react-hook-form, zod et les composants shadcn `Field`. Un formulaire reçoit `onSubmit`, `pending` et `error` en props, et c'est la route qui le branche sur les hooks. C'est ce qui permet de le tester sans mock de module (lint `no-module-mocking`).
 
 ## Tests
