@@ -1,9 +1,18 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, notInArray } from "drizzle-orm";
 
 import { db } from "../../db/client";
+import { env } from "../../env";
 import { ApiError } from "../../errors";
-import { presignUpload } from "../../storage";
-import type { CreatedDrawing, CreateDrawing, DrawingSummary, PatchDrawing } from "./model";
+import { enqueueParsing } from "../../parsing/queue";
+import { objectSize, presignDownload, presignUpload, storage } from "../../storage";
+import type {
+  CreatedDrawing,
+  CreateDrawing,
+  DrawingDetail,
+  DrawingStatus,
+  DrawingSummary,
+  PatchDrawing,
+} from "./model";
 import { drawing, type DrawingRow } from "./schema";
 
 function toSummary(row: DrawingRow): DrawingSummary {
@@ -71,18 +80,93 @@ export async function listDrawings(ownerId: string): Promise<DrawingSummary[]> {
   return rows.map((row) => toSummary(row));
 }
 
+function owned(ownerId: string, id: string) {
+  return and(eq(drawing.id, id), eq(drawing.ownerId, ownerId));
+}
+
 /** A Dessin of the owner; anyone else's is reported as missing. */
-export async function getDrawing(ownerId: string, id: string): Promise<DrawingSummary> {
-  const [row] = await db
-    .select()
-    .from(drawing)
-    .where(and(eq(drawing.id, id), eq(drawing.ownerId, ownerId)));
+async function ownedRow(ownerId: string, id: string): Promise<DrawingRow> {
+  const [row] = await db.select().from(drawing).where(owned(ownerId, id));
 
   if (row === undefined) {
     throw notFound();
   }
 
-  return toSummary(row);
+  return row;
+}
+
+/** The Résumé of a Dessin of the owner, with links to its current revision once there is one. */
+export async function getDrawing(ownerId: string, id: string): Promise<DrawingDetail> {
+  const row = await ownedRow(ownerId, id);
+  const { parsedKey, sourceKey } = row;
+  const revision = parsedKey !== null && sourceKey !== null;
+
+  return {
+    ...toSummary(row),
+    parsedUrl: revision ? presignDownload(parsedKey) : null,
+    sourceUrl: revision ? presignDownload(sourceKey) : null,
+  };
+}
+
+// Statuses in which the pending Fichier source is already handed to the Parsing.
+const IN_PARSING: DrawingStatus[] = ["queued", "parsing"];
+
+function noPendingUpload(): ApiError {
+  return new ApiError(409, "NO_PENDING_UPLOAD", "No upload of this drawing awaits completion");
+}
+
+/**
+ * Checks that the pending Fichier source was uploaded within the size limit,
+ * then queues its Parsing.
+ */
+export async function completeUpload(ownerId: string, id: string): Promise<DrawingSummary> {
+  const row = await ownedRow(ownerId, id);
+  const key = row.pendingSourceKey;
+
+  if (key === null || IN_PARSING.includes(row.status)) {
+    throw noPendingUpload();
+  }
+
+  const size = await objectSize(key);
+
+  if (size === null) {
+    throw new ApiError(409, "SOURCE_FILE_MISSING", "The file was not uploaded");
+  }
+
+  if (size > env.maxUploadBytes) {
+    // Nothing will ever read it; a smaller file can still be sent to the same URL.
+    await storage.delete(key);
+
+    throw new ApiError(
+      413,
+      "SOURCE_FILE_TOO_LARGE",
+      `The file exceeds the limit of ${env.maxUploadBytes} bytes`,
+    );
+  }
+
+  // Rolled back if the job cannot be queued. The condition settles a race
+  // between two concurrent completions.
+  return db.transaction(async (tx) => {
+    const [queued] = await tx
+      .update(drawing)
+      .set({ status: "queued", error: null })
+      .where(
+        and(
+          owned(ownerId, id),
+          eq(drawing.pendingSourceKey, key),
+          notInArray(drawing.status, IN_PARSING),
+        ),
+      )
+      .returning();
+
+    if (queued === undefined) {
+      throw noPendingUpload();
+    }
+
+    await enqueueParsing(id, key);
+
+    return toSummary(queued);
+  });
 }
 
 export async function updateDrawing(
@@ -93,7 +177,7 @@ export async function updateDrawing(
   const [row] = await db
     .update(drawing)
     .set({ name: changes.name, description: changes.description })
-    .where(and(eq(drawing.id, id), eq(drawing.ownerId, ownerId)))
+    .where(owned(ownerId, id))
     .returning();
 
   if (row === undefined) {

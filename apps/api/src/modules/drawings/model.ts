@@ -1,27 +1,8 @@
+import { DXF_UNITS, EntityCounts, Extent, Layer } from "@repo/dxf";
 import { t } from "elysia";
 
 import { env } from "../../env";
 import { DRAWING_STATUSES } from "./schema";
-
-// Kept in sync by hand with the Dessin parsé of the DXF module (#3) until the
-// summary reuses its schemas.
-
-export const Point = t.Object({ x: t.Number(), y: t.Number() });
-
-export type Point = typeof Point.static;
-
-export const Extent = t.Object({ min: Point, max: Point });
-
-export type Extent = typeof Extent.static;
-
-export const Layer = t.Object({ name: t.String(), color: t.Integer(), visible: t.Boolean() });
-
-export type Layer = typeof Layer.static;
-
-/** Number of entities per DXF entity type (`LINE`, `INSERT`…). */
-export const EntityCounts = t.Record(t.String(), t.Integer({ minimum: 0 }));
-
-export type EntityCounts = typeof EntityCounts.static;
 
 export const DrawingStatus = t.UnionEnum(DRAWING_STATUSES);
 
@@ -36,7 +17,7 @@ export const DrawingSummary = t.Object({
   error: t.Nullable(t.String()),
   sizeBytes: t.Nullable(t.Integer()),
   dxfVersion: t.Nullable(t.String()),
-  units: t.Nullable(t.String()),
+  units: t.Nullable(t.UnionEnum(DXF_UNITS)),
   extent: t.Nullable(Extent),
   layers: t.Nullable(t.Array(Layer)),
   entityCounts: t.Nullable(EntityCounts),
@@ -46,6 +27,19 @@ export const DrawingSummary = t.Object({
 });
 
 export type DrawingSummary = typeof DrawingSummary.static;
+
+/** Résumé of one Dessin, with presigned, short-lived GET URLs to its current revision, if any. */
+export const DrawingDetail = t.Composite([
+  DrawingSummary,
+  t.Object({
+    /** The Dessin parsé, as JSON. */
+    parsedUrl: t.Nullable(t.String()),
+    /** The Fichier source, as uploaded. */
+    sourceUrl: t.Nullable(t.String()),
+  }),
+]);
+
+export type DrawingDetail = typeof DrawingDetail.static;
 
 const Name = t.String({ minLength: 1, maxLength: 200 });
 

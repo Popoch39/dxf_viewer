@@ -1,8 +1,8 @@
+import type { EntityCounts, Extent, Layer, Units } from "@repo/dxf";
 import { sql } from "drizzle-orm";
 import { bigint, index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "../auth/schema";
-import type { EntityCounts, Extent, Layer } from "./model";
 
 export const DRAWING_STATUSES = [
   "awaiting_upload",
@@ -37,7 +37,7 @@ export const drawing = pgTable(
     sizeBytes: bigint("size_bytes", { mode: "number" }),
     sha256: text("sha256"),
     dxfVersion: text("dxf_version"),
-    units: text("units"),
+    units: text("units").$type<Units>(),
     extent: jsonb("extent").$type<Extent>(),
     layers: jsonb("layers").$type<Layer[]>(),
     entityCounts: jsonb("entity_counts").$type<EntityCounts>(),

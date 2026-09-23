@@ -125,14 +125,14 @@ describe("GET /drawings", () => {
 });
 
 describe("GET /drawings/:id", () => {
-  it("returns the drawing's summary", async () => {
+  it("returns the drawing's summary, without links before a Parsing", async () => {
     const cookie = await signedUpCookie(app.handle);
     const { drawing } = await createdDrawing(cookie, "Plan");
 
     const { data, status } = await api.drawings({ id: drawing.id }).get({ headers: { cookie } });
 
     expect(status).toBe(200);
-    expect(data).toEqual(drawing);
+    expect(data).toEqual({ ...drawing, parsedUrl: null, sourceUrl: null });
   });
 
   it("answers 404 for an unknown drawing", async () => {

@@ -60,6 +60,7 @@ export const env = {
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL"),
   maxUploadBytes: positiveInteger("MAX_UPLOAD_BYTES", 200 * 1024 * 1024),
+  parsingConcurrency: positiveInteger("PARSING_CONCURRENCY", 2),
   auth: {
     secret: required("BETTER_AUTH_SECRET"),
     url: required("BETTER_AUTH_URL"),
