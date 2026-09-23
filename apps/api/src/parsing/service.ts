@@ -5,6 +5,7 @@ import { db } from "../db/client";
 import { logger } from "../logger";
 import { drawing } from "../modules/drawings/schema";
 import { storage } from "../storage";
+import { publishStatus, statusColumns } from "./events";
 
 // Every write is conditioned on the pending key: a job whose Fichier source is
 // no longer pending (drawing deleted, upload replaced) changes nothing.
@@ -22,17 +23,19 @@ function parsedKey(drawingId: string, sha256: string): string {
  * for good; any other error is thrown, for the queue to retry.
  */
 export async function parseSource(drawingId: string, sourceKey: string): Promise<void> {
-  const started = await db
+  const [started] = await db
     .update(drawing)
     .set({ status: "parsing" })
     .where(pending(drawingId, sourceKey))
-    .returning({ id: drawing.id });
+    .returning(statusColumns);
 
-  if (started.length === 0) {
+  if (started === undefined) {
     logger.info({ drawingId }, "Parsing skipped: the Fichier source is no longer pending");
 
     return;
   }
+
+  await publishStatus(drawingId, started);
 
   const bytes = await storage.file(sourceKey).bytes();
   const parsed = await parsedOrRejected(drawingId, sourceKey, bytes);
@@ -46,7 +49,7 @@ export async function parseSource(drawingId: string, sourceKey: string): Promise
   await storage.write(key, JSON.stringify(parsed), { type: "application/json" });
 
   // A single UPDATE: the whole Résumé and the new revision switch at once.
-  const updated = await db
+  const [updated] = await db
     .update(drawing)
     .set({
       status: "ready",
@@ -66,15 +69,16 @@ export async function parseSource(drawingId: string, sourceKey: string): Promise
       parsedAt: new Date(),
     })
     .where(pending(drawingId, sourceKey))
-    .returning({ id: drawing.id });
+    .returning(statusColumns);
 
-  if (updated.length === 0) {
+  if (updated === undefined) {
     await storage.delete(key);
     logger.info({ drawingId }, "Parsing discarded: the Fichier source is no longer pending");
 
     return;
   }
 
+  await publishStatus(drawingId, updated);
   logger.info({ drawingId, sha256 }, "Drawing parsed");
 }
 
@@ -99,12 +103,18 @@ async function parsedOrRejected(
 
 /** The Fichier source is not a readable DXF: it is dropped, and the Dessin fails. */
 async function rejectSource(drawingId: string, sourceKey: string, message: string): Promise<void> {
-  await db
+  const [failed] = await db
     .update(drawing)
     .set({ status: "failed", error: message, pendingSourceKey: null, pendingSourceFilename: null })
-    .where(pending(drawingId, sourceKey));
+    .where(pending(drawingId, sourceKey))
+    .returning(statusColumns);
 
   await storage.delete(sourceKey);
+
+  if (failed !== undefined) {
+    await publishStatus(drawingId, failed);
+  }
+
   logger.info({ drawingId, reason: message }, "Parsing failed: invalid DXF");
 }
 
@@ -113,8 +123,13 @@ async function rejectSource(drawingId: string, sourceKey: string, message: strin
  * pending, so completing the upload again queues a new Parsing.
  */
 export async function abandonParsing(drawingId: string, sourceKey: string): Promise<void> {
-  await db
+  const [failed] = await db
     .update(drawing)
     .set({ status: "failed", error: "The file could not be processed, please try again later" })
-    .where(pending(drawingId, sourceKey));
+    .where(pending(drawingId, sourceKey))
+    .returning(statusColumns);
+
+  if (failed !== undefined) {
+    await publishStatus(drawingId, failed);
+  }
 }

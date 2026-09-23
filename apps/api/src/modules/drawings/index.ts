@@ -1,4 +1,4 @@
-import { Elysia, t } from "elysia";
+import { Elysia, sse, t } from "elysia";
 
 import { ErrorEnvelope } from "../../errors";
 import { authPlugin } from "../auth";
@@ -9,8 +9,16 @@ import {
   DrawingParams,
   DrawingSummary,
   PatchDrawing,
+  StatusEventMessage,
 } from "./model";
-import { completeUpload, createDrawing, getDrawing, listDrawings, updateDrawing } from "./service";
+import {
+  completeUpload,
+  createDrawing,
+  getDrawing,
+  listDrawings,
+  statusEvents,
+  updateDrawing,
+} from "./service";
 
 export const drawings = new Elysia({ prefix: "/drawings", tags: ["Drawings"] })
   .use(authPlugin)
@@ -49,6 +57,25 @@ export const drawings = new Elysia({ prefix: "/drawings", tags: ["Drawings"] })
         summary: "Signal the end of the upload: the Fichier source is checked, then queued",
         description:
           "409 `SOURCE_FILE_MISSING` when nothing was uploaded, 413 `SOURCE_FILE_TOO_LARGE` over the size limit, 409 `NO_PENDING_UPLOAD` when the upload is already completed.",
+      },
+    },
+  )
+  .get(
+    "/:id/events",
+    async function* ({ user, params, request }) {
+      // Aborted when the client disconnects, which drops the Redis subscription.
+      for await (const event of statusEvents(user.id, params.id, request.signal)) {
+        yield sse({ event: "status", data: event });
+      }
+    },
+    {
+      auth: true,
+      params: DrawingParams,
+      response: { 200: t.AsyncIterator(StatusEventMessage), 404: ErrorEnvelope },
+      detail: {
+        summary: "Server-sent events: the Statut of a Dessin, then each of its changes",
+        description:
+          "The first `status` event carries the current Statut; the next ones follow the Parsing (`queued → parsing → ready / failed`).",
       },
     },
   )

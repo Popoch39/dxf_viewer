@@ -8,6 +8,19 @@ export const DrawingStatus = t.UnionEnum(DRAWING_STATUSES);
 
 export type DrawingStatus = typeof DrawingStatus.static;
 
+/** An event of the Statut stream: the Statut of the Dessin, and its last Parsing error. */
+export const StatusEvent = t.Object({
+  status: DrawingStatus,
+  error: t.Nullable(t.String()),
+});
+
+export type StatusEvent = typeof StatusEvent.static;
+
+/** A server-sent event of the Statut stream. */
+export const StatusEventMessage = t.Object({ event: t.Literal("status"), data: StatusEvent });
+
+export type StatusEventMessage = typeof StatusEventMessage.static;
+
 /** Résumé of a Dessin: everything but the geometry. Revision fields stay null until a Parsing succeeds. */
 export const DrawingSummary = t.Object({
   id: t.String({ format: "uuid" }),

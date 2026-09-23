@@ -47,9 +47,11 @@ export const drawing = pgTable(
     pendingSourceFilename: text("pending_source_filename"),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    // Set by the database clock, shared by the API and the worker: it orders
+    // the changes of Statut they publish.
     updatedAt: timestamp("updated_at")
       .defaultNow()
-      .$onUpdate(() => new Date())
+      .$onUpdate(() => sql`now()`)
       .notNull(),
     parsedAt: timestamp("parsed_at"),
   },

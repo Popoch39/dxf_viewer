@@ -3,6 +3,7 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { env } from "../../env";
 import { ApiError } from "../../errors";
+import { publishStatus, type StatusChange, subscribeToStatus } from "../../parsing/events";
 import { enqueueParsing } from "../../parsing/queue";
 import { objectSize, presignDownload, presignUpload, storage } from "../../storage";
 import type {
@@ -12,6 +13,7 @@ import type {
   DrawingStatus,
   DrawingSummary,
   PatchDrawing,
+  StatusEvent,
 } from "./model";
 import { drawing, type DrawingRow } from "./schema";
 
@@ -146,8 +148,8 @@ export async function completeUpload(ownerId: string, id: string): Promise<Drawi
 
   // Rolled back if the job cannot be queued. The condition settles a race
   // between two concurrent completions.
-  return db.transaction(async (tx) => {
-    const [queued] = await tx
+  const queued = await db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(drawing)
       .set({ status: "queued", error: null })
       .where(
@@ -159,14 +161,51 @@ export async function completeUpload(ownerId: string, id: string): Promise<Drawi
       )
       .returning();
 
-    if (queued === undefined) {
+    if (updated === undefined) {
       throw noPendingUpload();
     }
 
     await enqueueParsing(id, key);
 
-    return toSummary(queued);
+    return updated;
   });
+
+  await publishStatus(id, queued);
+
+  return toSummary(queued);
+}
+
+function sameStatus(event: StatusEvent, change: StatusChange): boolean {
+  return event.status === change.status && event.error === change.error;
+}
+
+/**
+ * The Statut of a Dessin of the owner, then each of its changes, until `signal`
+ * aborts.
+ */
+export async function* statusEvents(
+  ownerId: string,
+  id: string,
+  signal: AbortSignal,
+): AsyncGenerator<StatusEvent> {
+  // Subscribed before the Statut is read: no change can fall in between.
+  await using subscription = await subscribeToStatus(id, signal);
+  const row = await ownedRow(ownerId, id);
+  let current: StatusEvent = { status: row.status, error: row.error };
+  let at = row.updatedAt.getTime();
+
+  yield current;
+
+  for await (const change of subscription) {
+    // Older than what was sent: published before the Statut was read, or
+    // overtaken by a change published from another process.
+    if (change.at >= at && !sameStatus(current, change)) {
+      current = { status: change.status, error: change.error };
+      at = change.at;
+
+      yield current;
+    }
+  }
 }
 
 export async function updateDrawing(
