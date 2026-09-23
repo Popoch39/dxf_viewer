@@ -1,7 +1,20 @@
 import { createRouter } from "@tanstack/react-router";
 
-import { queryClient } from "./api/query-client.ts";
+import { authQueries } from "./api/auth/index.ts";
+import { createQueryClient } from "./api/query-client.ts";
 import { routeTree } from "./routeTree.gen.ts";
+
+// A 401 in the middle of a page: the Session is gone, back to the login page,
+// which brings the Utilisateur back here once signed in again.
+export const queryClient = createQueryClient(() => {
+  queryClient.setQueryData(authQueries.session().queryKey, null);
+
+  const { pathname, href } = router.state.location;
+
+  if (pathname !== "/login" && pathname !== "/register") {
+    void router.navigate({ to: "/login", search: { redirect: href } });
+  }
+});
 
 export const router = createRouter({
   routeTree,

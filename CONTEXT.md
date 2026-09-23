@@ -16,8 +16,14 @@ Glossaire du visualiseur DXF. Ces termes sont employés tels quels dans le code,
 **Résumé**
 : La vue légère d'un Dessin, renvoyée par les listes et les consultations : nom, description, Statut, erreur éventuelle, taille, dates, version DXF, unités, emprise, calques et compteurs par type d'entité. Il ne contient pas la géométrie.
 
+**Utilisateur**
+: Une personne inscrite, identifiée par son email unique, avec un nom et un mot de passe. On dit Utilisateur, jamais « compte ».
+
+**Session**
+: L'état « connecté » d'un Utilisateur sur un navigateur. Elle persiste entre deux visites, jusqu'à la déconnexion ou à son expiration. Sans Session, seules l'inscription et la connexion sont accessibles.
+
 **Propriétaire**
-: L'utilisateur qui a créé un Dessin. Lui seul peut le voir, le modifier ou le supprimer. Pour tout autre utilisateur, le Dessin n'existe pas (404).
+: L'Utilisateur qui a créé un Dessin. Lui seul peut le voir, le modifier ou le supprimer. Pour tout autre Utilisateur, le Dessin n'existe pas (404).
 
 **Parsing**
 : Le traitement asynchrone, exécuté par le worker, qui lit un Fichier source, le valide et en produit le Dessin parsé. Un DXF invalide est un échec définitif ; une panne d'infrastructure est retentée.

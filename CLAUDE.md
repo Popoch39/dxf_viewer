@@ -21,7 +21,8 @@ La spec produit est l'issue GitHub #1, découpée en tickets #2 à #9. Le vocabu
 bun install
 bun infra:up / bun infra:down  # Postgres, Redis, MinIO (compose.yaml) + création du bucket
 bun dev                        # turbo dev (tous les workspaces)
-bun run test                   # turbo test (bun test par package ; `bun test` seul lance le runner de bun à la racine)
+bun run test                   # turbo test (bun test par package, vitest pour le viewer ; `bun test` seul lance le runner de bun à la racine)
+bun run --cwd apps/viewer test:e2e  # Playwright contre la vraie API (infra up), hors turbo
 bun run build                  # turbo build
 bun check-types                # turbo check-types
 bun lint / bun lint:fix        # oxlint, depuis la racine uniquement (pas via turbo)

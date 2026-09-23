@@ -27,7 +27,7 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
 
 - **Env** : copier `.env.example` en `.env`. `src/env.ts` lève au démarrage si `VITE_API_URL` manque. Côté API, `VIEWER_URL` doit être l'origine du viewer (CORS avec credentials).
 - **Client** : `src/api/client.ts` exporte `api` (Eden Treaty typé par `type App` du workspace `api`, cookie de session envoyé) et `unwrap()`, qui renvoie `data` ou lève une `ApiRequestError` (`status`, `code`, `message`, `details` de l'enveloppe d'erreur). Toute `queryFn` / `mutationFn` passe par `unwrap()` : c'est elle qui fait échouer la requête côté TanStack Query. Le `QueryClient` (`src/api/query-client.ts`) ne retente jamais une 4xx.
-- **Un fichier par module de l'API** : `src/api/<module>.ts`, calqué sur `apps/api/src/modules/<module>` (`drawings.ts`, `auth.ts`…). Chaque fichier contient, dans cet ordre :
+- **Un dossier par module de l'API** : `src/api/<module>/`, calqué sur `apps/api/src/modules/<module>` (`auth/`, `drawings/`…), qui s'importe par `@/api/<module>`. Seuls `client.ts` et `query-client.ts`, partagés, restent à la racine de `src/api/`. `src/api/` ne contient que le transport. La logique pure dont les composants ont besoin (schémas de formulaire, traduction des erreurs…) va dans `src/<domaine>/` (par exemple `src/auth/`), avec ses tests. Le `index.ts` du dossier contient, dans cet ordre :
   1. une fabrique `<module>Queries` de `queryOptions`, avec des clés hiérarchiques qui partent du nom du module, pour que l'invalidation d'un préfixe couvre ses enfants :
 
      ```ts
@@ -50,4 +50,16 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
 
   2. les hooks réutilisables, nommés d'après le domaine (`CONTEXT.md`) : `useDrawings()`, `useDrawing(id)`, `useCreateDrawing()`, `useRenameDrawing()`… Arguments positionnels (lint `no-object-parameters`).
 - **Mutations** : chaque hook de mutation met à jour ou invalide lui-même le cache dans son `onSuccess`, via la fabrique. Le composant appelle `mutate` et gère seulement l'UI (toast, fermeture de dialogue…).
-- **Composants** : ils consomment uniquement les hooks `use*` de `src/api/<module>.ts`. `api`, `useQuery` et `useMutation` restent confinés à `src/api/`. Les données serveur vivent dans le cache TanStack Query : on les lit par le hook là où on en a besoin, sans les recopier dans un `useState`.
+- **Composants** : ils consomment uniquement les hooks `use*` de `src/api/<module>/`. `api`, `useQuery` et `useMutation` restent confinés à `src/api/`. Les données serveur vivent dans le cache TanStack Query : on les lit par le hook là où on en a besoin, sans les recopier dans un `useState`.
+
+## Auth (Utilisateur et Session)
+
+- **Client** : Eden ne type pas `/api/auth/*`, donc `src/api/auth/` passe par le client vanilla de Better Auth (`better-auth/client`), jamais par `better-auth/react`. Chaque appel passe par `unwrapAuth()`, qui lève une `ApiRequestError` comme `unwrap()`. La Session appartient au cache TanStack Query, `authQueries.session()`, qui vaut `null` quand personne n'est connecté.
+- **Routes** : une page qui demande une Session se met sous le layout sans segment `src/routes/_authenticated.tsx`. Son `beforeLoad` redirige vers `/login?redirect=<url>`. `/login` et `/register` renvoient vers `redirect` (ou `/`) si une Session existe déjà. `authSearchSchema` (`src/auth/schemas.ts`) n'accepte que des chemins internes, pour éviter un open redirect.
+- **401** : le `QueryClient` est créé dans `src/router.ts` par `createQueryClient(onUnauthorized)`. Toute query ou mutation qui reçoit un 401 vide la Session du cache et renvoie vers `/login`.
+- **Formulaires** : react-hook-form, zod et les composants shadcn `Field`. Un formulaire reçoit `onSubmit`, `pending` et `error` en props, et c'est la route qui le branche sur les hooks. C'est ce qui permet de le tester sans mock de module (lint `no-module-mocking`).
+
+## Tests
+
+- `bun run test` (vitest + Testing Library, jsdom) : les tests `src/**/*.test.{ts,tsx}`, sans réseau.
+- `bun run test:e2e` (Playwright) : `e2e/`, contre la vraie API. Il faut `bun infra:up` et `apps/api/.env` avec `VIEWER_URL=http://localhost:5173`. Il réutilise l'API et le viewer s'ils tournent déjà, sinon il les démarre. Il n'est pas branché sur `turbo test`. La première fois, lancer `bunx playwright install chromium`.
