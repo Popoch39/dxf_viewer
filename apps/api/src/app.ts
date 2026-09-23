@@ -1,6 +1,8 @@
+import { cors } from "@elysiajs/cors";
 import { type ElysiaOpenAPIConfig, openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 
+import { env } from "./env";
 import { errorHandler } from "./errors";
 import { logger } from "./logger";
 import { authPlugin } from "./modules/auth";
@@ -25,6 +27,8 @@ const documentation = {
 export const app = new Elysia()
   .use(requestLogger(logger))
   .use(errorHandler)
+  // Credentials: the viewer authenticates with the session cookie.
+  .use(cors({ origin: env.viewerUrl, credentials: true }))
   .use(
     openapi({
       // SAFETY: Better Auth generates valid OpenAPI; only its declared types
@@ -38,3 +42,5 @@ export const app = new Elysia()
   .use(drawings);
 
 export type App = typeof app;
+
+export type { ErrorEnvelope } from "./errors";

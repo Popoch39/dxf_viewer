@@ -65,6 +65,7 @@ export const env = {
     secret: required("BETTER_AUTH_SECRET"),
     url: required("BETTER_AUTH_URL"),
   },
+  viewerUrl: required("VIEWER_URL"),
   s3: {
     endpoint: required("S3_ENDPOINT"),
     bucket: required("S3_BUCKET"),

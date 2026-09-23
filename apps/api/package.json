@@ -21,6 +21,7 @@
     "docker:build": "docker build -f Dockerfile -t dxf-viewer-api ../.."
   },
   "dependencies": {
+    "@elysiajs/cors": "^1.4.2",
     "@elysiajs/openapi": "^1.4.16",
     "@repo/dxf": "workspace:*",
     "@sinclair/typebox": "^0.34.52",

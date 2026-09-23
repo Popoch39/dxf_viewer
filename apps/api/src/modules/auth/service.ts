@@ -12,6 +12,8 @@ export const AUTH_BASE_PATH = "/api/auth";
 export const auth = betterAuth({
   basePath: AUTH_BASE_PATH,
   baseURL: env.auth.url,
+  // `baseURL` is trusted by default; the viewer calls from its own origin.
+  trustedOrigins: [env.viewerUrl],
   secret: env.auth.secret,
   database: drizzleAdapter(db, { provider: "pg", schema }),
   emailAndPassword: { enabled: true },
