@@ -77,9 +77,8 @@ export const errorHandler = new Elysia({ name: "error-handler" }).onError(
         return status(404, envelope("NOT_FOUND", "Route not found"));
       }
 
+      // Logged with its stack by the request logger.
       default: {
-        console.error(error);
-
         return status(500, envelope("INTERNAL", "Internal server error"));
       }
     }

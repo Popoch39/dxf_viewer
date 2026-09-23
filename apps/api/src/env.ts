@@ -19,8 +19,33 @@ function port(name: string, fallback: number): number {
   return value;
 }
 
+const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
+
+type LogLevel = (typeof LOG_LEVELS)[number];
+
+function isLogLevel(value: string): value is LogLevel {
+  return LOG_LEVELS.some((level) => level === value);
+}
+
+function logLevel(name: string, fallback: LogLevel): LogLevel {
+  const raw = Bun.env[name];
+
+  if (raw === undefined || raw === "") {
+    return fallback;
+  }
+
+  if (!isLogLevel(raw)) {
+    throw new Error(
+      `Invalid environment variable ${name}: "${raw}" is not one of ${LOG_LEVELS.join(", ")}`,
+    );
+  }
+
+  return raw;
+}
+
 export const env = {
   port: port("PORT", 3000),
+  logLevel: logLevel("LOG_LEVEL", "info"),
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL"),
   auth: {

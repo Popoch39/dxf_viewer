@@ -2,9 +2,11 @@ import { type ElysiaOpenAPIConfig, openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 
 import { errorHandler } from "./errors";
+import { logger } from "./logger";
 import { authPlugin } from "./modules/auth";
 import { authOpenApi } from "./modules/auth/service";
 import { health } from "./modules/health";
+import { requestLogger } from "./request-logger";
 
 const authDocs = await authOpenApi();
 
@@ -19,6 +21,7 @@ const documentation = {
 };
 
 export const app = new Elysia()
+  .use(requestLogger(logger))
   .use(errorHandler)
   .use(
     openapi({
