@@ -16,6 +16,13 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
   - données impératives lourdes (parsing DXF, scène, buffers) gardées hors de l'état React ou traitées comme immuables.
   - Si un composant se comporte bizarrement, suspecter le compilateur : vérifier les règles ci-dessus, et en dernier recours `"use no memo"` en tête du composant, avec un commentaire qui explique pourquoi.
 
+## Routing (TanStack Router)
+
+- **File-based** : une route par fichier dans `src/routes/` (`__root.tsx` pour le layout racine, `index.tsx` pour `/`, `drawings/$id.tsx` pour `/drawings/:id`…). Un fichier ou dossier préfixé par `-` est ignoré. Le plugin Vite (`@tanstack/router-plugin`, placé avant `react()`) génère `src/routeTree.gen.ts` en dev comme en build : ce fichier est commité, exclu d'oxlint et d'oxfmt, et ne s'édite jamais à la main. `autoCodeSplitting` découpe chaque route automatiquement.
+- **Router** : `src/router.ts` crée le router et déclare `Register` (liens et params typés partout). `RouterProvider` est rendu sous `QueryClientProvider` dans `main.tsx`.
+- **Avec TanStack Query** : le `queryClient` est dans le contexte du router (`createRootRouteWithContext`). Un `loader` précharge avec la fabrique, `loader: ({ context, params }) => context.queryClient.ensureQueryData(drawingQueries.detail(params.id))`, et le composant lit ensuite la donnée par son hook `use*`. Le cache reste celui de TanStack Query : `defaultPreloadStaleTime: 0`, et le preload au survol des liens (`defaultPreload: "intent"`) passe par lui.
+- **L'URL est un propriétaire d'état** : filtres, onglet, sélection partageable vont dans les params ou les search params (`validateSearch`), pas dans un `useState`.
+
 ## Data fetching (TanStack Query + Eden Treaty)
 
 - **Env** : copier `.env.example` en `.env`. `src/env.ts` lève au démarrage si `VITE_API_URL` manque. Côté API, `VIEWER_URL` doit être l'origine du viewer (CORS avec credentials).

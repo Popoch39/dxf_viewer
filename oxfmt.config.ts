@@ -17,5 +17,6 @@ export default defineConfig({
     "tools/oxlint/anti-slop/**",
     "**/dist/**",
     "**/out/**",
+    "**/routeTree.gen.ts",
   ],
 });

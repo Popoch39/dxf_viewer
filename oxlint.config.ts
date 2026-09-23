@@ -31,6 +31,7 @@ export default defineConfig({
     "tools/oxlint/anti-slop/**",
     "**/dist/**",
     "**/out/**",
+    "**/routeTree.gen.ts",
   ],
   jsPlugins: [{ name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" }],
   rules: {
@@ -64,4 +65,12 @@ export default defineConfig({
     "anti-slop/require-readable-spacing": "error",
     "anti-slop/require-safety-comment-for-type-assertion": "error",
   },
+  overrides: [
+    {
+      // A route file exports `Route` and keeps its components local: with
+      // `autoCodeSplitting`, the TanStack Router plugin handles their fast refresh.
+      files: ["apps/viewer/src/routes/**"],
+      rules: { "react/only-export-components": "off" },
+    },
+  ],
 });
