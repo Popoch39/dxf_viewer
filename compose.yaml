@@ -1,0 +1,66 @@
+# Local infra for the API: `bun infra:up` (from the repo root).
+# Host ports are offset from the defaults to avoid clashing with other local stacks.
+name: dxf-viewer
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: dxf
+      POSTGRES_PASSWORD: dxf
+      POSTGRES_DB: dxf
+    ports:
+      - "${POSTGRES_PORT:-5442}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dxf -d dxf"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "${REDIS_PORT:-6389}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  # MinIO no longer publishes to Docker Hub: images come from quay.io.
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: dxf
+      MINIO_ROOT_PASSWORD: dxf-secret
+    ports:
+      - "${MINIO_PORT:-9010}:9000"
+      - "${MINIO_CONSOLE_PORT:-9011}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  # One-shot job: creates the bucket, then exits.
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "mc alias set local http://minio:9000 dxf dxf-secret &&
+             mc mb --ignore-existing local/dxf"
+    restart: "no"
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
