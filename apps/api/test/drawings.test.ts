@@ -42,6 +42,8 @@ describe("POST /drawings", () => {
       layers: null,
     });
     expect(data?.drawing.createdAt).toBeInstanceOf(Date);
+    // Time-ordered UUID v7: the version digit opens the third group.
+    expect(data?.drawing.id).toMatch(/^[\da-f]{8}-[\da-f]{4}-7[\da-f]{3}-/);
   });
 
   it("gives an upload URL that accepts a direct PUT to the storage", async () => {

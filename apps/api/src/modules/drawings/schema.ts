@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { bigint, index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "../auth/schema";
@@ -16,7 +17,10 @@ export const drawingStatus = pgEnum("drawing_status", DRAWING_STATUSES);
 export const drawing = pgTable(
   "drawing",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    // Time-ordered: new rows land at the end of the primary key index.
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`uuidv7()`),
     ownerId: text("owner_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

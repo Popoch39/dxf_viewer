@@ -1,6 +1,6 @@
 CREATE TYPE "public"."drawing_status" AS ENUM('awaiting_upload', 'queued', 'parsing', 'ready', 'failed');--> statement-breakpoint
 CREATE TABLE "drawing" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"owner_id" text NOT NULL,
 	"name" text NOT NULL,
 	"description" text,

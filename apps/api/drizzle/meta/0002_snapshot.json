@@ -1,5 +1,5 @@
 {
-  "id": "d9db105b-e240-4974-a965-e1ed4a2a2d05",
+  "id": "004f7729-92cd-4ae3-a12c-a2e76105cecf",
   "prevId": "579c53ba-44e8-4841-8e45-979dfd77a426",
   "version": "7",
   "dialect": "postgresql",
@@ -358,7 +358,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "uuidv7()"
         },
         "owner_id": {
           "name": "owner_id",
