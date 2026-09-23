@@ -23,6 +23,10 @@ export const env = {
   port: port("PORT", 3000),
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL"),
+  auth: {
+    secret: required("BETTER_AUTH_SECRET"),
+    url: required("BETTER_AUTH_URL"),
+  },
   s3: {
     endpoint: required("S3_ENDPOINT"),
     bucket: required("S3_BUCKET"),

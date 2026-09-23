@@ -19,4 +19,16 @@ describe("OpenAPI documentation", () => {
       paths: { "/health": { get: expect.any(Object) } },
     });
   });
+
+  it("documents the Better Auth routes in the generated spec", async () => {
+    const response = await app.handle(new Request("http://localhost/openapi/json"));
+
+    expect(await response.json()).toMatchObject({
+      paths: {
+        "/api/auth/sign-up/email": { post: { tags: ["Auth"] } },
+        "/api/auth/sign-in/email": { post: { tags: ["Auth"] } },
+        "/api/auth/sign-out": { post: { tags: ["Auth"] } },
+      },
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { Elysia, t } from "elysia";
+import { Elysia, type InvertedStatusMap, t } from "elysia";
 
 export const ErrorDetail = t.Object({ path: t.String(), message: t.String() });
 
@@ -15,12 +15,22 @@ export const ErrorEnvelope = t.Object({
 
 export type ErrorEnvelope = typeof ErrorEnvelope.static;
 
+type HttpStatus = keyof InvertedStatusMap;
+
+/**
+ * 4xx and 5xx codes only: a plain `number` would make Eden type the error
+ * envelope as the payload of every status, 200 included.
+ */
+export type ErrorStatus = {
+  [Status in HttpStatus]: `${Status}` extends `4${string}` | `5${string}` ? Status : never;
+}[HttpStatus];
+
 /** Business error with a stable `code`, thrown from routes and services. */
 export class ApiError extends Error {
-  readonly status: number;
+  readonly status: ErrorStatus;
   readonly code: string;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: ErrorStatus, code: string, message: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -32,14 +42,16 @@ function envelope(code: string, message: string, details?: ErrorDetail[]): Error
   return { error: details === undefined ? { code, message } : { code, message, details } };
 }
 
-export const errorHandler = new Elysia({ name: "error-handler" })
-  .error({ ApiError })
-  .onError({ as: "global" }, ({ code, error, status }) => {
-    switch (code) {
-      case "ApiError": {
-        return status(error.status, envelope(error.code, error.message));
-      }
+export const errorHandler = new Elysia({ name: "error-handler" }).onError(
+  { as: "global" },
+  ({ code, error, status }) => {
+    // Matched by class, not by `code`: an `.error()` registration stays local to
+    // this instance, so errors thrown from other plugins would arrive as UNKNOWN.
+    if (error instanceof ApiError) {
+      return status(error.status, envelope(error.code, error.message));
+    }
 
+    switch (code) {
       case "VALIDATION": {
         const details = error.all.map((issue) => ({
           path: issue.path,
@@ -71,4 +83,5 @@ export const errorHandler = new Elysia({ name: "error-handler" })
         return status(500, envelope("INTERNAL", "Internal server error"));
       }
     }
-  });
+  },
+);
