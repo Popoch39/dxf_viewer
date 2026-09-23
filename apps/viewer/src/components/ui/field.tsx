@@ -41,7 +41,7 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="field-group"
       className={cn(
-        "group/field-group @container/field-group flex w-full flex-col gap-5 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4",
+        "group/field-group @container/field-group flex w-full flex-col gap-2 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4",
         className,
       )}
       {...props}
@@ -197,15 +197,12 @@ function FieldError({
     );
   }, [children, errors]);
 
-  if (!content) {
-    return null;
-  }
-
+  // Rendered even without an error: its reserved line keeps the form from moving when one shows up.
   return (
     <div
-      role="alert"
+      role={content ? "alert" : undefined}
       data-slot="field-error"
-      className={cn("text-sm font-normal text-destructive", className)}
+      className={cn("-mt-1 min-h-4 text-xs leading-4 font-normal text-destructive", className)}
       {...props}
     >
       {content}

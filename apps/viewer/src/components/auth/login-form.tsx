@@ -5,6 +5,7 @@ import { signInSchema, type SignInValues } from "@/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 import { AuthFormError } from "./auth-form-error";
 import { PasswordInput } from "./password-input";
@@ -66,10 +67,13 @@ export function LoginForm({ onSubmit, pending, error }: LoginFormProps) {
             </Field>
           )}
         />
-        <AuthFormError error={error} />
-        <Button type="submit" disabled={pending}>
-          Se connecter
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button type="submit" disabled={pending}>
+            {pending ? <Spinner data-icon="inline-start" /> : null}
+            Se connecter
+          </Button>
+          <AuthFormError error={error} />
+        </div>
       </FieldGroup>
     </form>
   );

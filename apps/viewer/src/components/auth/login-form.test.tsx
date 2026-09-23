@@ -51,6 +51,14 @@ describe("LoginForm", () => {
     expect(screen.getByRole("alert").textContent).toBe("Email ou mot de passe incorrect.");
   });
 
+  it("blocks a second submit while signing in", () => {
+    render(<LoginForm onSubmit={vi.fn()} pending error={null} />);
+
+    expect(screen.getByRole("button", { name: "Se connecter" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
   it("lets the password be shown", async () => {
     const { user } = renderForm();
 

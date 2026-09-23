@@ -22,6 +22,9 @@ export const router = createRouter({
   defaultPreload: "intent",
   // TanStack Query owns the cache: every preload goes through it.
   defaultPreloadStaleTime: 0,
+  // A route's pendingComponent shows after 150 ms instead of 1 s of blank page;
+  // once shown, it stays at least `defaultPendingMinMs` (500 ms), so it never just flashes.
+  defaultPendingMs: 150,
   scrollRestoration: true,
 });
 

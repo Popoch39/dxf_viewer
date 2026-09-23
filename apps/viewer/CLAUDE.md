@@ -52,6 +52,11 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
 
   2. les hooks réutilisables, nommés d'après le domaine (`CONTEXT.md`) : `useDrawings()`, `useDrawing(id)`, `useCreateDrawing()`, `useRenameDrawing()`… Arguments positionnels (lint `no-object-parameters`).
 - **Mutations** : chaque hook de mutation met à jour ou invalide lui-même le cache dans son `onSuccess`, via la fabrique. Le composant appelle `mutate` et gère seulement l'UI (toast, fermeture de dialogue…).
+- **Chargement : tout appel à l'API a un état de chargement visible**, jamais d'écran blanc ni de bouton qui ne réagit pas :
+  - une route dont le `beforeLoad` ou le `loader` attend l'API déclare un `pendingComponent` : un squelette (`Skeleton` de shadcn) qui reprend la mise en page de la page, pour que rien ne bouge quand elle s'affiche. Le texte statique (titres, labels) s'affiche tel quel, seul ce qui dépend de la donnée est en squelette. Exemples : `AuthFormSkeleton`, `AppHeaderSkeleton`. Le router l'affiche après 150 ms (`defaultPendingMs`) ;
+  - un composant qui lit une query rend un squelette tant que `isPending`, jamais `null` ;
+  - un bouton qui déclenche une mutation est `disabled` pendant `isPending` et affiche un `Spinner` (en `data-icon="inline-start"`, ou à la place de son icône) ;
+  - le conteneur d'un squelette est un `<output aria-label="Chargement">` (rôle `status` implicite, le lint refuse `role="status"`). Le `Spinner` est décoratif (`aria-hidden`) : c'est le bouton désactivé et son texte qui informent.
 - **Composants** : ils consomment uniquement les hooks `use*` de `src/api/<module>/`. `api`, `useQuery` et `useMutation` restent confinés à `src/api/`. Les données serveur vivent dans le cache TanStack Query : on les lit par le hook là où on en a besoin, sans les recopier dans un `useState`.
 
 ## Auth (Utilisateur et Session)
@@ -62,7 +67,7 @@ Toujours charger les skills React avant de toucher au front : `vercel-react-best
   - les hooks de connexion, d'inscription et de déconnexion mettent le store à jour dans leur `onSuccess`, et la déconnexion vide aussi le cache Query.
 - **Routes** : une page qui demande une Session se met sous le layout sans segment `src/routes/_authenticated.tsx`. Son `beforeLoad` fait `await loadCurrentUser()` et redirige vers `/login?redirect=<url>` s'il obtient `null`. `/login` et `/register` renvoient vers `redirect` (ou `/`) si une Session existe déjà. `authSearchSchema` (`src/auth/schemas.ts`) n'accepte que des chemins internes, pour éviter un open redirect.
 - **401** : le `QueryClient` est créé dans `src/router.ts` par `createQueryClient(onUnauthorized)`. Toute query ou mutation qui reçoit un 401 passe le store en `signedOut` et renvoie vers `/login`.
-- **Formulaires** : react-hook-form, zod et les composants shadcn `Field`. Un formulaire reçoit `onSubmit`, `pending` et `error` en props, et c'est la route qui le branche sur les hooks. C'est ce qui permet de le tester sans mock de module (lint `no-module-mocking`).
+- **Formulaires** : react-hook-form, zod et les composants shadcn `Field`. Un formulaire reçoit `onSubmit`, `pending` et `error` en props, et c'est la route qui le branche sur les hooks. C'est ce qui permet de le tester sans mock de module (lint `no-module-mocking`). Une erreur ne doit jamais décaler le formulaire : `FieldError` et `AuthFormError` réservent leur ligne même vides.
 
 ## Tests
 

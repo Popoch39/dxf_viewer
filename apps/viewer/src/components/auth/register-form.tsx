@@ -5,6 +5,7 @@ import { type SignUpInput, signUpSchema, type SignUpValues } from "@/auth/schema
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 import { AuthFormError } from "./auth-form-error";
 import { PasswordInput } from "./password-input";
@@ -82,17 +83,23 @@ export function RegisterForm({ onSubmit, pending, error }: RegisterFormProps) {
               {fieldState.invalid ? (
                 <FieldError errors={[fieldState.error]} />
               ) : (
-                <FieldDescription id="register-password-hint">
+                <FieldDescription
+                  id="register-password-hint"
+                  className="text-xs leading-4 last:-mt-1"
+                >
                   8 caractères minimum.
                 </FieldDescription>
               )}
             </Field>
           )}
         />
-        <AuthFormError error={error} />
-        <Button type="submit" disabled={pending}>
-          S'inscrire
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button type="submit" disabled={pending}>
+            {pending ? <Spinner data-icon="inline-start" /> : null}
+            S'inscrire
+          </Button>
+          <AuthFormError error={error} />
+        </div>
       </FieldGroup>
     </form>
   );
