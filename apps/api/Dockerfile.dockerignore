@@ -1,0 +1,10 @@
+# Used by BuildKit for `apps/api/Dockerfile` (context = repo root).
+**/node_modules
+**/.turbo
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.agents
+.claude
