@@ -56,12 +56,11 @@ let pendingSession: Promise<void> | null = null;
 async function askSession(): Promise<void> {
   try {
     const session = await unwrapAuth(authClient.getSession());
-    const { signedIn, signedOut } = useSessionStore.getState();
 
     if (session === null) {
-      signedOut();
+      useSessionStore.getState().signedOut();
     } else {
-      signedIn(session.user);
+      useSessionStore.getState().signedIn(session.user);
     }
   } finally {
     pendingSession = null;
