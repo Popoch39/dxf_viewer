@@ -1,0 +1,15 @@
+{
+  "extends": "@repo/typescript-config/base.json",
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "types": ["bun"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src", "test"]
+}

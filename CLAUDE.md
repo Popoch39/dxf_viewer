@@ -8,6 +8,7 @@ Monorepo Turborepo (bun, Node >= 24, TypeScript 7) pour un visualiseur DXF.
 
 - `apps/viewer` : front Vite 8 + React 19, avec React Compiler (via `@rolldown/plugin-babel` + `reactCompilerPreset` dans `vite.config.ts`), Tailwind v4 et shadcn (style `radix-nova`, primitives `radix-ui`, icônes `lucide-react`). Alias `@` → `apps/viewer/src`.
 - `apps/api` : backend Elysia sur Bun, avec Drizzle (driver Bun SQL), Redis (`RedisClient` de Bun) et un stockage S3 (`S3Client` de Bun, MinIO en local). Il exporte `type App` pour le client Eden Treaty du viewer.
+- `packages/dxf` (`@repo/dxf`) : module DXF. `parseDxf(texte)` renvoie un `ParsedDrawing` (schéma TypeBox exporté, validé avant d'être renvoyé) ou lève `InvalidDxfError`. Seul `src/dxf-parser.ts` connaît la lib `dxf-parser`. Les fixtures de test sont générées par `test/fixtures/generate.py` (ezdxf).
 - `packages/ui` (`@repo/ui`) : librairie de composants partagée, exportée en `./*` → `src/*.tsx`. Pour l'instant un stub.
 - `packages/typescript-config` : tsconfigs partagés.
 - `tools/oxlint/anti-slop/` : plugin oxlint vendoré (anti-slop). Ne pas le modifier à la main : passer par le skill `install-anti-slop`.

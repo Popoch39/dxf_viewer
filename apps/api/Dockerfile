@@ -10,6 +10,7 @@ WORKDIR /repo
 COPY package.json bun.lock ./
 COPY apps/api/package.json apps/api/
 COPY apps/viewer/package.json apps/viewer/
+COPY packages/dxf/package.json packages/dxf/
 COPY packages/typescript-config/package.json packages/typescript-config/
 COPY packages/ui/package.json packages/ui/
 RUN bun install --frozen-lockfile --production --ignore-scripts --filter api
